@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>天梯榜 · 贪吃蛇算法赛</title>
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/ladder-view.js"></script>
+</head>
+<body>
+    <main class="shell project-shell">
+        <nav class="project-nav" aria-label="主导航"><a class="project-brand" href="/">贪吃蛇算法赛</a><div><a href="/rules">规则</a><a href="/evaluate">测评区</a><a href="/ladder" aria-current="page">天梯榜</a></div></nav>
+        <header class="page-heading page-heading-actions"><div><h1>天梯榜</h1><p>按每次提交的最高加权分排名。</p></div><a class="primary-link" href="/ladder/play">我要打天梯 →</a></header>
+        <section id="ladder-list" class="project-panel" aria-label="天梯成绩">
+            <p id="ladder-status" role="status">正在读取天梯记录…</p>
+            <div class="table-scroll"><table aria-label="天梯排名"><thead><tr><th scope="col">排名</th><th scope="col">昵称</th><th scope="col">AI 模型</th><th scope="col">最高分</th><th scope="col">记录</th></tr></thead><tbody id="ladder-rows"></tbody></table></div>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>天梯详情 · 贪吃蛇算法赛</title>
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/ladder-view.js"></script>
+</head>
+<body>
+    <main class="shell project-shell">
+        <nav class="project-nav" aria-label="主导航"><a class="project-brand" href="/">贪吃蛇算法赛</a><div><a href="/rules">规则</a><a href="/evaluate">测评区</a><a href="/ladder" aria-current="page">天梯榜</a></div></nav>
+        <header class="page-heading page-heading-actions"><div><h1 id="entry-title">天梯记录</h1><p id="entry-status" role="status">正在读取提交记录…</p></div><a class="secondary-link" href="/ladder">返回天梯榜</a></header>
+        <div id="entry-content" hidden>
+            <section class="project-panel"><h2>十个种子的测试记录</h2><div id="entry-records"></div></section>        <section id="replay-panel" class="results-panel replay-panel" aria-labelledby="replay-title" hidden>
+            <h2 id="replay-title">对局回放</h2>
+            <div class="replay-layout">
+                <canvas id="board" width="440" height="440" role="img" aria-label="20×20 贪吃蛇棋盘"></canvas>
+                <div><p id="replay-meta"></p><p id="replay-state" aria-live="polite"></p>
+                    <div class="replay-controls"><button id="previous-step" class="seed-button" type="button">上一步</button><button id="play-replay" class="seed-button" type="button">播放</button><button id="next-step" class="seed-button" type="button">下一步</button></div>
+                    <label for="replay-step">跳转到步数</label><input id="replay-step" type="range" min="0" max="0" value="0">
+                    <p class="board-legend">绿：蛇头与蛇身　黄：食物　深灰：墙和障碍　红框：碰撞目标</p>
+                </div>
+            </div>
+        </section>
+            <section class="project-panel entry-code-panel"><h2>提交的 C++ 源码</h2><pre id="entry-code" class="code-block"></pre></section>
+        </div>
+    </main>
+</body>
+</html>

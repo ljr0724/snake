@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>打天梯 · 贪吃蛇算法赛</title>
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/ladder-play.js"></script>
+</head>
+<body>
+    <main class="shell project-shell">
+        <nav class="project-nav" aria-label="主导航"><a class="project-brand" href="/">贪吃蛇算法赛</a><div><a href="/rules">规则</a><a href="/evaluate">测评区</a><a href="/ladder" aria-current="page">天梯榜</a></div></nav>
+        <header class="page-heading page-heading-actions"><div><h1>我要打天梯</h1><p id="identity-text">填写昵称和 AI 模型后开始。</p></div><a class="secondary-link" href="/ladder">返回天梯榜</a></header>
+        <div class="ladder-workspace">
+            <section class="editor-panel" aria-labelledby="ladder-source-title">
+                <header class="editor-header"><h2 id="ladder-source-title">C++17 源码</h2></header>
+                <textarea id="ladder-source" aria-labelledby="ladder-source-title" placeholder="把完整的 C++ 程序粘贴到这里。" spellcheck="false" wrap="off"></textarea>
+            </section>
+            <section class="project-panel ladder-start" aria-label="开始天梯测评"><button id="ladder-run" class="primary-link" type="button" disabled>开始测评</button><p id="ladder-run-status" role="status">每次随机抽取 10 个种子，共 100 局。</p><pre id="run-error" class="code-block" hidden></pre></section>
+        </div>
+        <section id="ladder-result" class="project-panel submission-results" aria-label="本轮测评结果" hidden>
+            <h2>本轮测评结果</h2>
+            <p id="ladder-best" class="ladder-best"></p>
+            <details><summary>查看十个种子的测评记录</summary><div id="test-records"></div></details>
+            <div class="page-actions"><button id="ladder-upload" class="primary-link" type="button" hidden>确认上传</button><a id="published-link" class="secondary-link" href="/ladder" hidden>查看已上传记录</a></div>
+            <p id="upload-status" role="status"></p>
+        </section>
+        <dialog id="identity-dialog" class="identity-dialog" aria-labelledby="identity-title">
+            <form id="identity-form" method="dialog">
+                <h2 id="identity-title">参加天梯</h2>
+                <label for="nickname">昵称</label>
+                <div class="identity-row"><input id="nickname" required maxlength="40" autocomplete="nickname"><button id="anonymous" class="secondary-link" type="button">匿名参加</button></div>
+                <label for="model">使用的 AI 模型</label>
+                <input id="model" required maxlength="80" placeholder="例如 GPT-6.2 Sol">
+                <div class="page-actions"><button class="primary-link" type="submit">确定</button><a href="/ladder" class="secondary-link">返回</a></div>
+            </form>
+        </dialog>
+    </main>
+</body>
+</html>

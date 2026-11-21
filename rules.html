@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>游戏规则 · 贪吃蛇算法赛</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <main class="shell project-shell">
+        <nav class="project-nav" aria-label="主导航"><a class="project-brand" href="/">贪吃蛇算法赛</a><div><a href="/rules" aria-current="page">规则</a><a href="/evaluate">测评区</a><a href="/ladder">天梯榜</a></div></nav>
+        <header class="page-heading"><h1>游戏规则</h1><p>你的程序每回合决定蛇怎么走，吃食物得分，撞到东西就结束。</p></header>
+        <article class="reading-panel">
+            <h2>地图与操作</h2>
+            <p>棋盘是 20 行 × 20 列，左上角是 (0, 0)。蛇从 3 节开始，初始朝上。每回合选一个方向走一格。</p>
+            <dl class="rule-grid"><div><dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>上、左、下、右</dd></div><div><dt><code>H</code> / <code>B</code></dt><dd>蛇头 / 蛇身</dd></div><div><dt><code>F</code> / <code>.</code></dt><dd>食物 / 空地</dd></div><div><dt><code>#</code> / <code>O</code></dt><dd>边界墙 / 固定障碍</dd></div></dl>
+            <p>撞墙、障碍、自身，或者直接掉头，都会结束。本站也把走进移动前的旧尾格判为碰撞。</p>
+            <h2>吃食物和增长</h2>
+            <p>吃一个食物加 10 分，并从尾部增长一节。每成功移动 N 步，也会增长一节。两种增长同一步发生时，只增长一节，食物照常得分。</p>
+            <h2>程序怎么和评测器交互</h2>
+            <ol>
+                <li>开局读入 20 行棋盘和正整数 N。</li>
+                <li>每回合输出两行：方向，然后是移动前的分数。立即刷新输出，等待评测器回复。</li>
+                <li>收到 <code>20 20</code> 后更新本步。若收到有效行列坐标，更新本步后再放入新的食物。</li>
+                <li>收到 <code>100 100</code> 后输出碰撞前的 20 行地图和最后一行分数，然后退出。输入结束时也立即退出。</li>
+            </ol>
+            <h2>分数和天梯</h2>
+            <p>一个种子对应十局，N 依次为 1、2、4、8、16、32、64、128、256、512。一组的加权总分是每局原始分除以 <code>log₂(N) + 1</code> 后求和。</p>
+            <p>普通测评区可指定种子并比较方案。打天梯时，服务抽取十个不同种子，从完整跑完的测试组中取最高加权分。确认上传后，昵称、AI 模型、程序、十组测试记录及最高分组的回放都可以在天梯详情查看。</p>
+            <footer class="page-actions"><a class="primary-link" href="/prompt.md" download="snake-ai-prompt.md">查看 AI 提示词 ↓</a><a class="secondary-link" href="/ai-kit.zip" download="snake-ai-kit.zip">下载 AI 测试包</a><a class="secondary-link" href="/evaluate">进入测评区</a><a class="secondary-link" href="/ladder">查看天梯榜</a></footer>
+            <aside class="ai-handoff-tip" aria-label="怎样把任务交给 AI">
+                <strong>Tips · 怎样把任务交给 AI</strong>
+                <p>先下载 <code>snake-ai-kit.zip</code>，放进 Agent 的工作区。也可以把 ZIP 作为一个附件上传，让 Agent 自己解压。</p>
+                <p>再把下载的 AI 提示词发给它，让它在解压后的目录用终端编译、跑分和复测。优化旧版时，再附上你的 <code>snake.cpp</code>。</p>
+            </aside>
+        </article>
+    </main>
+</body>
+</html>
