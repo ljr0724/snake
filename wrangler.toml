@@ -1,0 +1,17 @@
+name = "snake-ladder"
+main = "snake-ladder-worker.mjs"
+compatibility_date = "2026-11-21"
+workers_dev = true
+
+[vars]
+SITE_ORIGIN = "https://ljr0724.github.io"
+
+[[d1_databases]]
+binding = "LADDER_DB"
+database_name = "snake-ladder"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[ratelimits]]
+name = "LADDER_LIMIT"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
