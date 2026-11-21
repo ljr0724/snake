@@ -38,6 +38,7 @@ jobs:
                   end = page.index('</section>', start)
                   page = page[:end] + '<a class="cover-card" href="./shared-ladder.html"><h2>共享天梯榜</h2><p>查看和提交测评成绩。</p></a>' + page[end:]
               elif name == 'evaluate.html':
+                  page = page.replace('./app.js', './app-online.js')
                   page = re.sub(r'(<p id="status"[^>]*>).*?(</p>)', lambda m: m[1] + online + m[2], page)
               elif name == 'ladder-play.html':
                   page = re.sub(r'(<p id="ladder-run-status"[^>]*>).*?(</p>)', lambda m: m[1] + note + m[2], page)
@@ -49,7 +50,7 @@ jobs:
           start = app.index('async function submit(')
           end = app.index('async function evaluate(', start)
           app = "import { browserEvaluate as submit } from './browser-evaluate.mjs';\n" + app[:start] + app[end:]
-          (out / 'app.js').write_text(app, encoding='utf-8')
+          (out / 'app-online.js').write_text(app, encoding='utf-8')
           script = Path('ladder-play.js').read_text(encoding='utf-8-sig')
           condition = 'busy || !identity || !source.value.trim()'
           script = script.replace('run.disabled = ' + condition + ';', 'run.disabled = true;')
@@ -57,6 +58,9 @@ jobs:
           (out / 'ladder-play.js').write_text(script, encoding='utf-8')
           for name in ('shared-ladder.html','ladder-results.js','replay.js','replay-state.mjs','style.css','snake-ai-kit.zip','browser-judge.mjs','browser-evaluate.mjs'):
               copyfile(name, out / name)
+          shared = (out / 'shared-ladder.html').read_text(encoding='utf-8-sig')
+          shared = shared.replace('本机测评', '测评').replace('提交本机成绩', '提交测评成绩')
+          (out / 'shared-ladder.html').write_text(shared, encoding='utf-8')
           copyfile('shared-ladder.html', out / 'ladder.html')
           copyfile('AI-PROMPT.md', out / 'AI-PROMPT.txt')
           for page in out.glob('*.html'):
