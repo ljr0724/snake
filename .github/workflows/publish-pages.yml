@@ -11,9 +11,8 @@ concurrency:
   group: snake-pages
   cancel-in-progress: true
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment: github-pages
     steps:
       - uses: actions/checkout@v4
       - name: Prepare Pages files
@@ -59,7 +58,12 @@ jobs:
               for target in re.findall(r'(?:href|src)="[.]/([^"]+)"', page.read_text(encoding='utf-8-sig')):
                   assert (out / target).is_file(), (page, target)
           PY
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: github-pages
+    steps:
       - uses: actions/deploy-pages@v4
