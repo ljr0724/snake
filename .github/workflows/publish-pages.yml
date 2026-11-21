@@ -1,0 +1,65 @@
+name: Publish Snake OJ and shared ladder
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: snake-pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare Pages files
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from shutil import copyfile
+          import re
+          out = Path('_site')
+          out.mkdir()
+          routes = {'/':'./', '/rules':'./rules.html', '/evaluate':'./evaluate.html',
+                    '/ladder':'./shared-ladder.html', '/ladder/play':'./ladder-play.html',
+                    '/ladder/entry':'./ladder-entry.html', '/prompt.md':'./AI-PROMPT.txt',
+                    '/ai-kit.zip':'./snake-ai-kit.zip'}
+          download = '<a href="https://github.com/ljr0724/snake/archive/refs/heads/main.zip">下载完整项目</a>'
+          note = '本机运行测评后，可导出 JSON，提交到共享天梯。' + download
+          for name in ('index.html','rules.html','evaluate.html','ladder-play.html','ladder-entry.html'):
+              page = Path(name).read_text(encoding='utf-8-sig')
+              page = re.sub(r'(href|src)="(/[^"]*)"', lambda m: m[1] + '="' + routes.get(m[2],'.' + m[2]) + '"', page)
+              if name == 'index.html':
+                  start = page.index('<section class="cover-links"')
+                  end = page.index('</section>', start)
+                  page = page[:end] + '<a class="cover-card" href="./shared-ladder.html"><h2>共享天梯榜</h2><p>查看和提交本机测评成绩。</p></a>' + page[end:]
+              elif name == 'evaluate.html':
+                  page = re.sub(r'(<p id="status"[^>]*>).*?(</p>)', lambda m: m[1] + note + m[2], page)
+              elif name == 'ladder-play.html':
+                  page = re.sub(r'(<p id="ladder-run-status"[^>]*>).*?(</p>)', lambda m: m[1] + note + m[2], page)
+              elif name == 'ladder-entry.html':
+                  page = page.replace('正在读取提交记录…', '旧版天梯详情请在本机测评台查看。')
+                  page = page.replace('    <script type="module" src="./ladder-view.js"></script>', '')
+              (out / name).write_text(page, encoding='utf-8')
+          for name, condition in [('app.js', 'busy || !source.value.trim()'),
+                                  ('ladder-play.js', 'busy || !identity || !source.value.trim()')]:
+              script = Path(name).read_text(encoding='utf-8-sig')
+              script = script.replace('run.disabled = ' + condition + ';', 'run.disabled = true;')
+              script = script.replace('if (' + condition + ') return;', 'if (run.disabled || ' + condition + ') return;')
+              (out / name).write_text(script, encoding='utf-8')
+          for name in ('shared-ladder.html','ladder-results.js','replay.js','replay-state.mjs','style.css','snake-ai-kit.zip'):
+              copyfile(name, out / name)
+          copyfile('shared-ladder.html', out / 'ladder.html')
+          copyfile('AI-PROMPT.md', out / 'AI-PROMPT.txt')
+          for page in out.glob('*.html'):
+              for target in re.findall(r'(?:href|src)="[.]/([^"]+)"', page.read_text(encoding='utf-8-sig')):
+                  assert (out / target).is_file(), (page, target)
+          PY
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - uses: actions/deploy-pages@v4
