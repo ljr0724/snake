@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>共享天梯榜 · 贪吃蛇算法赛</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main class="shell project-shell">
+  <nav class="project-nav" aria-label="主导航">
+    <a class="project-brand" href="./">贪吃蛇算法赛</a>
+    <div><a href="./rules.html">规则</a><a href="./evaluate.html">测评区</a><a href="./shared-ladder.html" aria-current="page">共享天梯榜</a></div>
+  </nav>
+  <header class="page-heading page-heading-actions">
+    <div><h1>共享天梯榜</h1><p>按照参赛者提交的本机测评加权分排序。</p></div>
+    <a class="secondary-link" href="#submit">提交成绩</a>
+  </header>
+  <section class="project-panel" aria-label="公开排名">
+    <p id="rank-status" role="status">正在读取榜单…</p>
+    <div class="table-scroll">
+      <table id="ranking" hidden aria-label="公开排行榜">
+        <thead><tr><th scope="col">排名</th><th scope="col">昵称</th><th scope="col">AI 模型</th><th scope="col">加权分</th><th scope="col">种子</th><th scope="col">记录</th></tr></thead>
+        <tbody id="rank-rows"></tbody>
+      </table>
+    </div>
+  </section>
+  <section id="submit" class="project-panel submission-results">
+    <h2>提交本机成绩</h2>
+    <p>在本机测评区跑完后点「导出 JSON」，或用命令行的 <code>--out</code> 保存结果。选中该文件，再选一组要公开的成绩。</p>
+    <form id="score-form">
+      <p><label for="nick">昵称</label> <input id="nick" required maxlength="40" autocomplete="nickname"></p>
+      <p><label for="model">AI 模型</label> <input id="model" required maxlength="80"></p>
+      <p><label for="report">本机测评 JSON</label> <input id="report" type="file" accept=".json,application/json" required></p>
+      <p><label for="suite">成绩组</label> <select id="suite" required disabled></select></p>
+      <button id="publish" class="primary-link" type="submit" disabled>去 GitHub 确认发布</button>
+      <p>提交需要 GitHub 登录。公开记录会显示账号、昵称、模型、种子和十局原始分。</p>
+      <p id="submit-status" role="status"></p>
+    </form>
+  </section>
+</main>
+<script type="module">
+const repo = 'ljr0724/snake';
+const title = '[Snake OJ] 天梯成绩';
+const prefix = '<!-- snake-oj-score-v1 ';
+const suffix = ' -->';
+const Ns = [1,2,4,8,16,32,64,128,256,512];
+
+function validRaw(raw) {
+    return Array.isArray(raw) && raw.length === Ns.length &&
+        raw.every(score => Number.isInteger(score) && score >= 0 && score <= 150000 && score % 10 === 0);
+}
+function total(raw) {
+    return raw.reduce((sum, score, index) => sum + score / (index + 1), 0);
+}
+function validSeed(seed) {
+    return Number.isInteger(seed) && seed >= 0 && seed <= 4294967295;
+}
+function collect(report) {
+    const sources = report?.format === 'snake-oj-result-v1' ? report.submissions :
+        report?.format === 'snake-oj-cli-v1' ? [report] : [];
+    return (Array.isArray(sources) ? sources : []).flatMap((source, index) =>
+        (Array.isArray(source?.suites) ? source.suites : []).flatMap(suite => {
+            if (!validSeed(suite?.seed) || !Number.isFinite(suite.weightedTotal) ||
+                !Array.isArray(suite.cases) || suite.cases.length !== Ns.length) return [];
+            const byN = new Map(suite.cases.filter(item => item?.status === 'collision').map(item => [item.n,item.score]));
+            const raw = Ns.map(n => byN.get(n));
+            if (!validRaw(raw) || Math.abs(total(raw) - suite.weightedTotal) > 0.0001) return [];
+            return [{ label: sources.length > 1 ? '方案 ' + String.fromCharCode(65 + index) + ' · ' : '',
+                seed:suite.seed, raw }];
+        })).sort((a,b) => total(b.raw)-total(a.raw));
+}
+function unpack(issue) {
+    if (issue.pull_request || issue.title !== title || !Number.isSafeInteger(issue.number)) return null;
+    const line = (issue.body ?? '').split(/\r?\n/,1)[0];
+    if (!line.startsWith(prefix) || !line.endsWith(suffix)) return null;
+    try {
+        const record = JSON.parse(decodeURIComponent(line.slice(prefix.length, -suffix.length)));
+        if (typeof record.nickname !== 'string' || !record.nickname.trim() || record.nickname.length > 40 ||
+            typeof record.model !== 'string' || !record.model.trim() || record.model.length > 80 ||
+            !validSeed(record.seed) || !validRaw(record.raw)) return null;
+        return { ...record, score:total(record.raw), number:issue.number };
+    } catch {
+        return null;
+    }
+}
+
+const get = id => document.getElementById(id);
+const status = get('rank-status');
+async function loadRanking() {
+    try {
+        const entries = [];
+        for (let page = 1; ; page++) {
+            const response = await fetch('https://api.github.com/repos/' + repo +
+                '/issues?state=open&per_page=100&page=' + page);
+            if (!response.ok) throw new Error('rank API');
+            const issues = await response.json();
+            entries.push(...issues.map(unpack).filter(Boolean));
+            if (issues.length < 100) break;
+        }
+        entries.sort((a,b) => b.score-a.score || a.number-b.number);
+        entries.forEach((entry,index) => {
+            const row = get('rank-rows').insertRow();
+            for (const value of [index+1,entry.nickname,entry.model,entry.score.toFixed(4),entry.seed]) {
+                row.insertCell().textContent = value;
+            }
+            const link = document.createElement('a');
+            link.href = 'https://github.com/' + repo + '/issues/' + entry.number;
+            link.textContent = '查看成绩';
+            row.insertCell().append(link);
+        });
+        get('ranking').hidden = !entries.length;
+        status.textContent = entries.length ? '' : '目前还没有公开成绩。';
+        status.hidden = entries.length > 0;
+    } catch {
+        status.textContent = '暂时无法读取排名。请稍后刷新，或先查看 GitHub 上的提交记录。';
+        const link = document.createElement('a');
+        link.href = 'https://github.com/' + repo + '/issues';
+        link.textContent = ' 打开提交记录';
+        status.append(link);
+    }
+}
+
+const input = get('report');
+const selection = get('suite');
+const publish = get('publish');
+const feedback = get('submit-status');
+let suites = [];
+input.addEventListener('change', async () => {
+    const file = input.files[0];
+    selection.replaceChildren();
+    selection.disabled = publish.disabled = true;
+    suites = [];
+    feedback.textContent = '';
+    if (!file) return;
+    try {
+        const content = await file.text();
+        if (file !== input.files[0]) return;
+        suites = collect(JSON.parse(content));
+        if (!suites.length) throw new Error('这个文件没有完整完成的十局成绩。');
+        for (const [index,suite] of suites.entries()) {
+            selection.add(new Option(suite.label + '种子 ' + suite.seed + ' · ' + total(suite.raw).toFixed(4), index));
+        }
+        selection.disabled = publish.disabled = false;
+    } catch (error) {
+        if (file === input.files[0]) feedback.textContent = error instanceof SyntaxError ? '文件不是有效的 JSON。' : error.message;
+    }
+});
+get('score-form').addEventListener('submit', event => {
+    event.preventDefault();
+    const suite = suites[Number(selection.value)];
+    const nickname = get('nick').value.trim();
+    const model = get('model').value.trim();
+    if (!suite || !nickname || !model) {
+        feedback.textContent = '请填写昵称和模型，并选择一个完整成绩组。';
+        return;
+    }
+    const record = { nickname,model,seed:suite.seed,raw:suite.raw };
+    const metadata = encodeURIComponent(JSON.stringify(record)).replace(/-/g,'%2D');
+    const body = [prefix + metadata + suffix, '', '本机测评成绩（自报）', '',
+        '种子：' + suite.seed, '加权分：' + total(suite.raw).toFixed(4), '',
+        '| N | 原始分 |', '| --- | --- |', ...Ns.map((n,index) => '| ' + n + ' | ' + suite.raw[index] + ' |')].join('\n');
+    const url = new URL('https://github.com/' + repo + '/issues/new');
+    url.search = new URLSearchParams({title,body});
+    location.assign(url.href);
+});
+loadRanking();
+</script>
+</body>
+</html>
