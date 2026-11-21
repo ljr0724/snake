@@ -16,6 +16,33 @@ let identity;
 let draft;
 let busy = false;
 
+const sharedUpload = document.createElement('a');
+sharedUpload.className = 'secondary-link';
+sharedUpload.target = '_blank';
+sharedUpload.rel = 'noopener noreferrer';
+sharedUpload.textContent = '提交到共享榜单';
+sharedUpload.hidden = true;
+upload.after(sharedUpload);
+
+function sharedIssue(data) {
+    const best = data.suites.find(suite => suite.seed === data.bestSeed);
+    if (!best || best.weightedTotal === null) return null;
+    const ns = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
+    const raw = ns.map(n => best.cases.find(game => game.n === n)?.score);
+    if (!raw.every(Number.isSafeInteger)) return null;
+    const metadata = encodeURIComponent(JSON.stringify({
+        ...identity, seed: best.seed, raw,
+    })).replace(/-/g, '%2D');
+    const body = ['<!-- snake-oj-score-v1 ' + metadata + ' -->', '',
+        '本机测评成绩（自报）', '', '种子：' + best.seed,
+        '加权分：' + scoreText(data.score), '', '| N | 原始分 |', '| --- | --- |',
+        ...ns.map((n, i) => '| ' + n + ' | ' + raw[i] + ' |')].join('\n');
+    const issue = new URL('https://github.com/ljr0724/snake/issues/new');
+    issue.search = new URLSearchParams({title: '[Snake OJ] 天梯成绩', body});
+    return issue.href;
+}
+
+
 function updateControls() {
     run.disabled = busy || !identity || !source.value.trim();
     upload.disabled = busy;
@@ -47,6 +74,7 @@ get('identity-form').addEventListener('submit', event => {
 });
 
 source.addEventListener('input', () => {
+    sharedUpload.hidden = true;
     if (draft) {
         draft = undefined;
         upload.hidden = true;
@@ -61,6 +89,7 @@ run.addEventListener('click', async () => {
     draft = undefined;
     upload.hidden = true;
     published.hidden = true;
+    sharedUpload.hidden = true;
     result.hidden = true;
     details.hidden = true;
     uploadStatus.textContent = '';
@@ -76,6 +105,11 @@ run.addEventListener('click', async () => {
         status.textContent = '完成 ' + complete + '/10 个测试组。';
         result.hidden = false;
         upload.hidden = !draft;
+        const share = draft ? sharedIssue(data) : null;
+        if (share) {
+            sharedUpload.href = share;
+            sharedUpload.hidden = false;
+        }
         if (draft) uploadStatus.textContent = '上传后，榜单详情中可以查看昵称、模型、源码和测试记录。';
     } catch (error) {
         status.textContent = error.message;
