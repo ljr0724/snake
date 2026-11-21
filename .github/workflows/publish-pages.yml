@@ -28,6 +28,7 @@ jobs:
                     '/ladder/entry':'./ladder-entry.html', '/prompt.md':'./AI-PROMPT.txt',
                     '/ai-kit.zip':'./snake-ai-kit.zip'}
           download = '<a href="https://github.com/ljr0724/snake/archive/refs/heads/main.zip">下载完整项目</a>'
+          online = '在浏览器中编译和评测 C++17。首次评测需加载编译器，结果可提交共享天梯。'
           note = '本机运行测评后，可导出 JSON，提交到共享天梯。' + download
           for name in ('index.html','rules.html','evaluate.html','ladder-play.html','ladder-entry.html'):
               page = Path(name).read_text(encoding='utf-8-sig')
@@ -35,22 +36,26 @@ jobs:
               if name == 'index.html':
                   start = page.index('<section class="cover-links"')
                   end = page.index('</section>', start)
-                  page = page[:end] + '<a class="cover-card" href="./shared-ladder.html"><h2>共享天梯榜</h2><p>查看和提交本机测评成绩。</p></a>' + page[end:]
+                  page = page[:end] + '<a class="cover-card" href="./shared-ladder.html"><h2>共享天梯榜</h2><p>查看和提交测评成绩。</p></a>' + page[end:]
               elif name == 'evaluate.html':
-                  page = re.sub(r'(<p id="status"[^>]*>).*?(</p>)', lambda m: m[1] + note + m[2], page)
+                  page = re.sub(r'(<p id="status"[^>]*>).*?(</p>)', lambda m: m[1] + online + m[2], page)
               elif name == 'ladder-play.html':
                   page = re.sub(r'(<p id="ladder-run-status"[^>]*>).*?(</p>)', lambda m: m[1] + note + m[2], page)
               elif name == 'ladder-entry.html':
                   page = page.replace('正在读取提交记录…', '旧版天梯详情请在本机测评台查看。')
                   page = page.replace('    <script type="module" src="./ladder-view.js"></script>', '')
               (out / name).write_text(page, encoding='utf-8')
-          for name, condition in [('app.js', 'busy || !source.value.trim()'),
-                                  ('ladder-play.js', 'busy || !identity || !source.value.trim()')]:
-              script = Path(name).read_text(encoding='utf-8-sig')
-              script = script.replace('run.disabled = ' + condition + ';', 'run.disabled = true;')
-              script = script.replace('if (' + condition + ') return;', 'if (run.disabled || ' + condition + ') return;')
-              (out / name).write_text(script, encoding='utf-8')
-          for name in ('shared-ladder.html','ladder-results.js','replay.js','replay-state.mjs','style.css','snake-ai-kit.zip'):
+          app = Path('app.js').read_text(encoding='utf-8-sig')
+          start = app.index('async function submit(')
+          end = app.index('async function evaluate(', start)
+          app = "import { browserEvaluate as submit } from './browser-evaluate.mjs';\n" + app[:start] + app[end:]
+          (out / 'app.js').write_text(app, encoding='utf-8')
+          script = Path('ladder-play.js').read_text(encoding='utf-8-sig')
+          condition = 'busy || !identity || !source.value.trim()'
+          script = script.replace('run.disabled = ' + condition + ';', 'run.disabled = true;')
+          script = script.replace('if (' + condition + ') return;', 'if (run.disabled || ' + condition + ') return;')
+          (out / 'ladder-play.js').write_text(script, encoding='utf-8')
+          for name in ('shared-ladder.html','ladder-results.js','replay.js','replay-state.mjs','style.css','snake-ai-kit.zip','browser-judge.mjs','browser-evaluate.mjs'):
               copyfile(name, out / name)
           copyfile('shared-ladder.html', out / 'ladder.html')
           copyfile('AI-PROMPT.md', out / 'AI-PROMPT.txt')
@@ -58,6 +63,58 @@ jobs:
               for target in re.findall(r'(?:href|src)="[.]/([^"]+)"', page.read_text(encoding='utf-8-sig')):
                   assert (out / target).is_file(), (page, target)
           PY
+      - name: Prepare browser C++17 compiler
+        run: |
+          vendor=_site/vendor
+          mkdir -p "$vendor/wasi"
+          npm install --prefix "$RUNNER_TEMP/snake-wasi" --ignore-scripts --no-audit --no-fund @runno/wasi@0.10.3
+          cp -R "$RUNNER_TEMP/snake-wasi/node_modules/@runno/wasi/dist/." "$vendor/wasi/"
+          node --input-type=module -e 'console.log(typeof (await import("./_site/vendor/wasi/main.js")).WASI)'
+          upstream=https://raw.githubusercontent.com/taybenlor/runno/af05728f02d907210d28587b4c32a306e79e312e
+          curl -fsSL --retry 3 "$upstream/LICENSE" -o "$vendor/runno-LICENSE.txt"
+          for file in clang.wasm wasm-ld.wasm; do
+            curl -fsSL --retry 3 "$upstream/langs/$file" -o "$vendor/$file"
+          done
+          curl -fsSL --retry 3 "$upstream/langs/clang-fs.tar.gz" -o "$RUNNER_TEMP/snake-clang.tar.gz"
+          python3 - "$RUNNER_TEMP/snake-clang.tar.gz" "$vendor/clang-files.json.gz" <<'PY'
+          import base64, gzip, json, sys, tarfile
+          with tarfile.open(sys.argv[1]) as archive:
+              files = {}
+              for member in archive:
+                  if member.isfile() or member.islnk() or member.issym():
+                      files['/' + member.name.removeprefix('./').lstrip('/')] = base64.b64encode(archive.extractfile(member).read()).decode('ascii')
+          assert '/sys/lib/wasm32-wasi/crt1.o' in files
+          headers = 'algorithm array bitset cassert cctype cerrno cfloat chrono climits cmath complex cstddef cstdint cstdio cstdlib cstring deque exception forward_list functional iomanip ios iostream iterator limits list map memory numeric optional queue random ratio set sstream stack stdexcept string string_view tuple type_traits unordered_map unordered_set utility variant vector'.split()
+          includes = ''.join(f'#include <{header}>\n' for header in headers if '/sys/include/c++/v1/' + header in files)
+          files['/sys/include/c++/v1/bits/stdc++.h'] = base64.b64encode(includes.encode('ascii')).decode('ascii')
+          with gzip.open(sys.argv[2], 'wt', encoding='ascii') as destination:
+              json.dump(files, destination, separators=(',', ':'))
+          PY
+      - name: Verify browser scores and replays against native judge
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { compile, intervals, judgeCase, suiteResult } from './_site/browser-judge.mjs';
+          import { withCompiledSource } from './compiler.mjs';
+          import { runSuite } from './judge.mjs';
+          globalThis.fetch = async url => new Response(await readFile(url));
+          const source = '#include <bits/stdc++.h>\n' + await readFile('example.cpp', 'utf8');
+          const executable = await compile(source);
+          const baseline = await withCompiledSource(source, async exe => {
+            const result = [];
+            for (const seed of [20261121, 314159]) result.push(await runSuite(exe, seed, true));
+            return result;
+          });
+          assert.ok(Array.isArray(baseline), JSON.stringify(baseline));
+          for (const reference of baseline) {
+            const actual = suiteResult(reference.seed, intervals.map(n => judgeCase(executable, n, reference.seed)));
+            assert.deepEqual(actual, reference);
+            assert.ok(Number.isFinite(actual.weightedTotal));
+            console.log('Seed %d: %d cases, weighted score %d', actual.seed, actual.cases.length, actual.weightedTotal);
+          }
+          await assert.rejects(compile('int main() { oops }'), { message: 'C++ 编译失败。' });
+          JS
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
