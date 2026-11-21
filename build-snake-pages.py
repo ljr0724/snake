@@ -21,10 +21,10 @@ if api:
 for name in pages:
     page = Path(name).read_text(encoding='utf-8-sig')
     page = re.sub(r'(href|src)="(/[^"]*)"', lambda m: m[1] + '="' + routes.get(m[2],'.' + m[2]) + '"', page)
-    if name == 'index.html' and not api:
+    if name == 'index.html':
         start = page.index('<section class="cover-links"')
         end = page.index('</section>', start)
-        page = page[:end] + '<a class="cover-card" href="./shared-ladder.html"><h2>共享天梯榜</h2><p>查看和提交测评成绩。</p></a>' + page[end:]
+        page = page[:end] + f'<a class="cover-card" href="{routes["/ladder"]}"><h2>共享天梯榜</h2><p>查看和提交测评成绩。</p></a>' + page[end:]
     elif name == 'evaluate.html':
         page = page.replace('./app.js', './app-online.js')
         page = re.sub(r'(<p id="status"[^>]*>).*?(</p>)', lambda m: m[1] + online + m[2], page)
@@ -65,17 +65,17 @@ if api:
     view = view.replace('fillTestRecords, requestJSON, scoreText', 'fillTestRecords, scoreText')
     view = view.replace("'/ladder/entry?id='", "'./ladder-entry.html?id='")
     view = view.replace("const { entries } = await requestJSON('/api/ladder');", """const { entries, hasNext } = await requestJSON('/api/ladder');
-nst page = Number(new URLSearchParams(location.search).get('page') || 1);
-nst pages = get('ladder-pages');
-r (const [available, target, label] of [[page > 1, page - 1, '上一页'], [hasNext, page + 1, '下一页']]) {
-  if (!available) continue;
-  const link = document.createElement('a');
-  link.href = '?page=' + target;
-  link.className = 'secondary-link';
-  link.textContent = label;
-  pages.append(link);
-
-ges.hidden = !pages.childElementCount;""")
+        const page = Number(new URLSearchParams(location.search).get('page') || 1);
+        const pages = get('ladder-pages');
+        for (const [available, target, label] of [[page > 1, page - 1, '上一页'], [hasNext, page + 1, '下一页']]) {
+            if (!available) continue;
+            const link = document.createElement('a');
+            link.href = '?page=' + target;
+            link.className = 'secondary-link';
+            link.textContent = label;
+            pages.append(link);
+        }
+        pages.hidden = !pages.childElementCount;""")
     view = view.replace('[index + 1,', '[(page - 1) * 50 + index + 1,')
     (out / 'ladder-view-online.js').write_text(transport + view, encoding='utf-8')
 else:
