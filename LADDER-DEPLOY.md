@@ -19,6 +19,15 @@ npx wrangler deploy
 
 1. 在仓库的 Settings → Secrets and variables → Actions → Variables 中添加 `SNAKE_LADDER_API`。填写 Worker 的 HTTPS 地址，例如 `https://snake-ladder.example.workers.dev`，无需路径。
 2. 在 Actions 中重新运行 **Publish Snake OJ and shared ladder**。部署后从首页点「天梯榜」，然后点「我要打天梯」。
-3. 在浏览器中完成一次提交，打开榜单详情和回放。未设置该变量时，网站继续使用旧版 GitHub Issue 榜单。新版也保留旧榜入口。
+3. 在浏览器中完成一次提交，打开榜单详情和回放。确认提交所用的浏览器能看到「删除我的记录」。
+
+如果数据库建于删除功能上线前，在部署新版 Worker 前执行下列迁移。使用当前 schema 新建的数据库已包含这两列。
+
+```sql
+ALTER TABLE entries ADD COLUMN owner_digest TEXT;
+ALTER TABLE entries ADD COLUMN deleted_at TEXT;
+```
+
+删除凭证保存在提交时所用的浏览器。数据库存储凭证的哈希，删除后的记录从公开列表和详情移除。旧成绩没有删除凭证，可由管理员在数据库中设置 `deleted_at`。
 
 后端为每轮随机分配十个种子、重算加权分并校验提交格式。C++ 在参赛者的浏览器运行，因此榜单成绩源自浏览器上报。

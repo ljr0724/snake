@@ -9,15 +9,13 @@ if api:
     parsed = urlsplit(api)
     assert parsed.scheme == 'https' and parsed.hostname and not (parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password), 'SNAKE_LADDER_API must be an HTTPS origin'
 routes = {'/':'./', '/rules':'./rules.html', '/evaluate':'./evaluate.html',
-          '/ladder':'./ladder.html' if api else './shared-ladder.html', '/ladder/play':'./ladder-play.html',
+          '/ladder':'./ladder.html', '/ladder/play':'./ladder-play.html',
           '/ladder/entry':'./ladder-entry.html', '/prompt.md':'./AI-PROMPT.txt',
           '/ai-kit.zip':'./snake-ai-kit.zip'}
 download = '<a href="https://github.com/ljr0724/snake/archive/refs/heads/main.zip">下载完整项目</a>'
 online = '在浏览器中编译和评测 C++17。首次评测需加载编译器，结果可提交共享天梯。'
 note = '本机运行测评后，可导出 JSON，提交到共享天梯。' + download
-pages = ['index.html','rules.html','evaluate.html','ladder-play.html','ladder-entry.html']
-if api:
-    pages.append('ladder.html')
+pages = ['index.html','rules.html','evaluate.html','ladder-play.html','ladder-entry.html','ladder.html']
 for name in pages:
     page = Path(name).read_text(encoding='utf-8-sig')
     page = re.sub(r'(href|src)="(/[^"]*)"', lambda m: m[1] + '="' + routes.get(m[2],'.' + m[2]) + '"', page)
@@ -33,12 +31,14 @@ for name in pages:
     elif name == 'ladder-entry.html' and not api:
         page = page.replace('正在读取提交记录…', '旧版天梯详情请在本机测评台查看。')
         page = page.replace('    <script type="module" src="./ladder-view.js"></script>', '')
+    elif name == 'ladder.html' and not api:
+        page = page.replace('正在读取天梯记录…', '共享天梯暂未配置。')
+        page = page.replace('    <script type="module" src="./ladder-view.js"></script>', '')
     if api:
-        page = page.replace('./ladder-play.js', './ladder-play-online.js').replace('./ladder-view.js', './ladder-view-online.js')
+        page = page.replace('./ladder-play.js', './ladder-play-online.js?v=2').replace('./ladder-view.js', './ladder-view-online.js?v=2')
         if name == 'ladder.html':
             page = page.replace('按每次提交的最高加权分排名。', '按每次提交的最高加权分排名。成绩由参赛者的浏览器评测。')
             page = page.replace('</section>', '<nav id="ladder-pages" class="page-actions" aria-label="天梯分页" hidden></nav></section>')
-            page = page.replace('</header>', '<a class="secondary-link" href="./shared-ladder.html">旧版榜单</a></header>')
     (out / name).write_text(page, encoding='utf-8')
 app = Path('app.js').read_text(encoding='utf-8-sig')
 start = app.index('async function submit(')
@@ -47,7 +47,7 @@ app = "import { browserEvaluate as submit } from './browser-evaluate.mjs';\n" + 
 (out / 'app-online.js').write_text(app, encoding='utf-8')
 script = Path('ladder-play.js').read_text(encoding='utf-8-sig')
 if api:
-    transport = "import { requestOnline as requestJSON } from './online-ladder.mjs';\n"
+    transport = "import { requestOnline as requestJSON, addDeleteControl } from './online-ladder.mjs?v=2';\n"
     (out / 'ladder-config.mjs').write_text('export const apiOrigin = ' + json.dumps(api) + ';\n', encoding='utf-8')
     copyfile('online-ladder.mjs', out / 'online-ladder.mjs')
     script = script.replace('fillTestRecords, requestJSON, scoreText', 'fillTestRecords, scoreText')
@@ -77,20 +77,18 @@ if api:
         }
         pages.hidden = !pages.childElementCount;""")
     view = view.replace('[index + 1,', '[(page - 1) * 50 + index + 1,')
+    view = view.replace('row.insertCell().append(link);', '''const cell = row.insertCell();
+            cell.append(link);
+            addDeleteControl(cell, entry);''')
     (out / 'ladder-view-online.js').write_text(transport + view, encoding='utf-8')
 else:
     condition = 'busy || !identity || !source.value.trim()'
     script = script.replace('run.disabled = ' + condition + ';', 'run.disabled = true;')
     script = script.replace('if (' + condition + ') return;', 'if (run.disabled || ' + condition + ') return;')
     (out / 'ladder-play.js').write_text(script, encoding='utf-8')
-for name in ('shared-ladder.html','ladder-results.js','replay.js','replay-state.mjs','style.css','snake-ai-kit.zip','browser-judge.mjs','browser-evaluate.mjs'):
+for name in ('ladder-results.js','replay.js','replay-state.mjs','style.css','snake-ai-kit.zip','browser-judge.mjs','browser-evaluate.mjs'):
     copyfile(name, out / name)
-shared = (out / 'shared-ladder.html').read_text(encoding='utf-8-sig')
-shared = shared.replace('本机测评', '测评').replace('提交本机成绩', '提交测评成绩')
-(out / 'shared-ladder.html').write_text(shared, encoding='utf-8')
-if not api:
-    copyfile('shared-ladder.html', out / 'ladder.html')
 copyfile('AI-PROMPT.md', out / 'AI-PROMPT.txt')
 for page in out.glob('*.html'):
     for target in re.findall(r'(?:href|src)="[.]/([^"]+)"', page.read_text(encoding='utf-8-sig')):
-        assert (out / target).is_file(), (page, target)
+        assert (out / target.split('?', 1)[0]).is_file(), (page, target)

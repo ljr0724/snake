@@ -4,6 +4,15 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const directions = /^[WASD]$/;
 const submissionLimit = 1800000;
 const challengeLifetime = 2 * 60 * 60 * 1000;
+const ownerKeyPattern = /^[a-f0-9]{64}$/;
+
+function validOwnerKey(value) {
+    return typeof value === 'string' && ownerKeyPattern.test(value);
+}
+async function ownerDigest(value) {
+    const hash = await crypto.subtle.digest('SHA-256', encoder.encode(value));
+    return base64(new Uint8Array(hash));
+}
 
 function base64(bytes) {
     return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
@@ -21,7 +30,7 @@ async function challenge(env) {
     const data = { id: crypto.randomUUID(), seeds: [...seeds], expires: Date.now() + challengeLifetime };
     const payload = base64(encoder.encode(JSON.stringify(data)));
     const signature = await crypto.subtle.sign('HMAC', await key(env), encoder.encode(payload));
-    return { seeds: data.seeds, token: payload + '.' + base64(new Uint8Array(signature)) };
+    return { id: data.id, seeds: data.seeds, token: payload + '.' + base64(new Uint8Array(signature)) };
 }
 async function readChallenge(token, env) {
     if (typeof token !== 'string' || token.length > 600 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) return null;
@@ -143,18 +152,18 @@ export default {
                 const page = Number(url.searchParams.get('page') ?? 1);
                 if (!integer(page, 1, 10000)) return json({ error: '无效的页码。' }, 400);
                 const { results } = await env.LADDER_DB.prepare(
-                    'SELECT id, nickname, model, score, created_at AS createdAt FROM entries ORDER BY score DESC, created_at, id LIMIT 51 OFFSET ?'
+                    'SELECT id, nickname, model, score, created_at AS createdAt FROM entries WHERE deleted_at IS NULL ORDER BY score DESC, created_at, id LIMIT 51 OFFSET ?'
                 ).bind((page - 1) * 50).all();
                 return json({ entries: results.slice(0, 50), hasNext: results.length > 50 });
             }
             if (request.method === 'GET' && url.pathname === '/api/ladder/entry') {
                 const id = url.searchParams.get('id') ?? '';
                 const entry = uuid.test(id) ? await env.LADDER_DB.prepare(
-                    'SELECT payload FROM entries WHERE id = ?'
+                    'SELECT payload FROM entries WHERE id = ? AND deleted_at IS NULL'
                 ).bind(id).first() : null;
                 return entry ? json(JSON.parse(entry.payload)) : json({ error: '这条天梯记录不存在。' }, 404);
             }
-            if (request.method === 'POST' && ['/api/ladder/challenge', '/api/ladder/upload'].includes(url.pathname)) {
+            if (request.method === 'POST' && ['/api/ladder/challenge', '/api/ladder/upload', '/api/ladder/delete'].includes(url.pathname)) {
                 if (origin !== env.SITE_ORIGIN) return json({ error: '请从贪吃蛇网站提交。' }, 403);
                 const visitor = request.headers.get('CF-Connecting-IP') ?? 'local';
                 const rate = await env.LADDER_LIMIT.limit({ key: visitor + ':' + url.pathname });
@@ -163,14 +172,25 @@ export default {
                 let body;
                 try { body = await readBody(request); }
                 catch { return json({ error: '提交记录格式无效或过大。' }, 400); }
+                if (url.pathname.endsWith('/delete')) {
+                    if (typeof body?.id !== 'string' || !uuid.test(body.id) || !validOwnerKey(body.ownerKey)) {
+                        return json({ error: '记录或删除凭证无效。' }, 400);
+                    }
+                    const digest = await ownerDigest(body.ownerKey);
+                    const removed = await env.LADDER_DB.prepare(
+                        'UPDATE entries SET deleted_at = COALESCE(deleted_at, ?) WHERE id = ? AND owner_digest = ? RETURNING id'
+                    ).bind(new Date().toISOString(), body.id, digest).first();
+                    return removed ? json({ id: removed.id }) : json({ error: '没有这条记录的删除权限。' }, 403);
+                }
+                if (!validOwnerKey(body?.ownerKey)) return json({ error: '请刷新网页后重新测评并提交。' }, 400);
                 const trial = await readChallenge(body?.token, env);
                 if (!trial || trial.expires < Date.now()) return json({ error: '本轮评测已过期，请重新运行。' }, 400);
                 let entry;
                 try { entry = buildEntry(body, trial); }
                 catch (error) { return json({ error: error.message }, 400); }
                 await env.LADDER_DB.prepare(
-                    'INSERT INTO entries (id, nickname, model, score, created_at, payload) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING'
-                ).bind(entry.id, entry.nickname, entry.model, entry.score, entry.createdAt, JSON.stringify(entry)).run();
+                    'INSERT INTO entries (id, nickname, model, score, created_at, payload, owner_digest) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING'
+                ).bind(entry.id, entry.nickname, entry.model, entry.score, entry.createdAt, JSON.stringify(entry), await ownerDigest(body.ownerKey)).run();
                 return json({ id: entry.id }, 201);
             }
             return json({ error: '接口不存在。' }, 404);
