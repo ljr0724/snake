@@ -35,10 +35,10 @@ for name in pages:
         page = page.replace('正在读取天梯记录…', '共享天梯暂未配置。')
         page = page.replace('    <script type="module" src="./ladder-view.js"></script>', '')
     if api:
-        page = page.replace('./ladder-play.js', './ladder-play-online.js?v=2').replace('./ladder-view.js', './ladder-view-online.js?v=2')
+        page = page.replace('./ladder-play.js', './ladder-play-online.js?v=3').replace('./ladder-view.js', './ladder-view-online.js?v=3')
         if name == 'ladder.html':
             page = page.replace('按每次提交的最高加权分排名。', '按每次提交的最高加权分排名。成绩由参赛者的浏览器评测。')
-            page = page.replace('</section>', '<nav id="ladder-pages" class="page-actions" aria-label="天梯分页" hidden></nav></section>')
+            page = page.replace('</section>', '<button id="ladder-retry" class="seed-button" type="button" hidden>重新读取</button><nav id="ladder-pages" class="page-actions" aria-label="天梯分页" hidden></nav></section>')
     (out / name).write_text(page, encoding='utf-8')
 app = Path('app.js').read_text(encoding='utf-8-sig')
 start = app.index('async function submit(')
@@ -47,7 +47,7 @@ app = "import { browserEvaluate as submit } from './browser-evaluate.mjs';\n" + 
 (out / 'app-online.js').write_text(app, encoding='utf-8')
 script = Path('ladder-play.js').read_text(encoding='utf-8-sig')
 if api:
-    transport = "import { requestOnline as requestJSON, addDeleteControl } from './online-ladder.mjs?v=2';\n"
+    transport = "import { requestOnline as requestJSON, addDeleteControl } from './online-ladder.mjs?v=3';\n"
     (out / 'ladder-config.mjs').write_text('export const apiOrigin = ' + json.dumps(api) + ';\n', encoding='utf-8')
     copyfile('online-ladder.mjs', out / 'online-ladder.mjs')
     script = script.replace('fillTestRecords, requestJSON, scoreText', 'fillTestRecords, scoreText')
@@ -66,7 +66,6 @@ if api:
     view = view.replace("'/ladder/entry?id='", "'./ladder-entry.html?id='")
     view = view.replace("const { entries } = await requestJSON('/api/ladder');", """const { entries, hasNext } = await requestJSON('/api/ladder');
         const page = Number(new URLSearchParams(location.search).get('page') || 1);
-        const pages = get('ladder-pages');
         for (const [available, target, label] of [[page > 1, page - 1, '上一页'], [hasNext, page + 1, '下一页']]) {
             if (!available) continue;
             const link = document.createElement('a');
@@ -76,6 +75,33 @@ if api:
             pages.append(link);
         }
         pages.hidden = !pages.childElementCount;""")
+    start = view.index('async function showLadder(rows) {')
+    stop = view.index('        const { entries, hasNext }', start)
+    view = view[:start] + """async function showLadder(rows) {
+    const status = get('ladder-status');
+    const retry = get('ladder-retry');
+    const pages = get('ladder-pages');
+    const frames = ['正在读取天梯记录.', '正在读取天梯记录..', '正在读取天梯记录…'];
+    let frame = 0;
+    status.hidden = false;
+    status.textContent = frames[frame];
+    retry.hidden = true;
+    pages.replaceChildren();
+    pages.hidden = true;
+    const timer = setInterval(() => {
+        frame = (frame + 1) % frames.length;
+        status.textContent = frames[frame];
+    }, 450);
+    try {
+""" + view[stop:]
+    view = view.replace("        get('ladder-status').textContent = error.message;", """        status.textContent = error.message;
+        retry.hidden = false;
+    } finally {
+        clearInterval(timer);""")
+    view = view.replace('if (table) showLadder(table);', """if (table) {
+    get('ladder-retry').addEventListener('click', () => showLadder(table));
+    showLadder(table);
+}""")
     view = view.replace('[index + 1,', '[(page - 1) * 50 + index + 1,')
     view = view.replace('row.insertCell().append(link);', '''const cell = row.insertCell();
             cell.append(link);

@@ -1,4 +1,3 @@
-import { browserEvaluate } from './browser-evaluate.mjs';
 import { apiOrigin } from './ladder-config.mjs';
 
 let pending;
@@ -48,18 +47,33 @@ async function api(path, body) {
         const page = new URLSearchParams(location.search).get('page');
         if (page) path += '?page=' + encodeURIComponent(page);
     }
-    const response = await fetch(new URL(path, apiOrigin), body === undefined ? undefined : {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || '共享天梯请求失败。');
-    return data;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), body === undefined ? 8000 : 20000);
+    try {
+        const options = { signal: controller.signal, cache: 'no-store' };
+        if (body !== undefined) {
+            options.method = 'POST';
+            options.headers = { 'Content-Type': 'application/json' };
+            options.body = JSON.stringify(body);
+        }
+        const response = await fetch(new URL(path, apiOrigin), options);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '共享天梯请求失败。');
+        return data;
+    } catch (error) {
+        if (controller.signal.aborted) throw new Error('连接天梯服务器超时。');
+        if (error instanceof TypeError || error instanceof SyntaxError) throw new Error('暂时无法连接天梯服务器。');
+        throw error;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 export async function requestOnline(path, body) {
     if (path === '/api/ladder/run') {
         pending = undefined;
         const { id, token, seeds } = await api('/api/ladder/challenge', {});
+        const { browserEvaluate } = await import('./browser-evaluate.mjs');
         const evaluation = await browserEvaluate({ label: 'ladder', code: body.code }, seeds);
         if (evaluation.error) throw Object.assign(new Error(evaluation.error), { details: evaluation.details });
         const best = evaluation.suites.reduce((top, suite) =>
